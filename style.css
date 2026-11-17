@@ -1,0 +1,95 @@
+:root {
+  --ground: #111316;
+  --panel: #1a1d21;
+  --line: #2b3036;
+  --line-strong: #3a4047;
+  --text: #eceef0;
+  --muted: #aeb4bc;
+  --wood: #ddb56c;
+  --wood-ink: #1b1408;
+  --won: #9fd49a;
+  --lost: #ff9a6b;
+  --error: #ff8a4c;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--ground); color: var(--text); }
+body { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; font: 15px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
+p { margin: 0; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; opacity: .4; }
+button:focus-visible { outline: 2px solid var(--wood); outline-offset: 2px; }
+
+#app { display: flex; height: 100vh; height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.board-area { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 24px; }
+#board { width: 100%; height: 100%; max-height: calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); display: block; touch-action: none; -webkit-touch-callout: none; }
+#board.active { cursor: pointer; }
+.offline { margin: auto; max-width: 420px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+
+.side { flex: none; width: 300px; display: flex; flex-direction: column; gap: 20px; padding: 28px 24px; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; }
+.rank { display: flex; flex-direction: column; gap: 2px; }
+.rank-label { font-size: 13px; color: var(--muted); }
+.rank-value { font-size: 34px; line-height: 1.1; font-weight: 700; letter-spacing: -.01em; }
+.muted { color: var(--muted); }
+.players { display: flex; flex-direction: column; gap: 8px; }
+.player { display: flex; align-items: center; gap: 10px; }
+.player .name { flex: 1; font-weight: 600; }
+.player .prisoners { font-size: 13px; color: var(--muted); }
+.stone-mark { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #6b727b; }
+.stone-mark.black { background: #0e0f11; }
+.stone-mark.white { background: #f2f1ec; }
+.handicap { font-weight: 600; color: var(--wood); }
+.status { font-size: 17px; font-weight: 600; }
+.status.error { font-size: 14px; font-weight: 400; color: var(--error); }
+.note { font-size: 13px; color: var(--error); }
+.actions { display: flex; gap: 8px; }
+.actions button { flex: 1; }
+.primary, .outline { min-height: 44px; padding: 0 16px; border-radius: 8px; font-weight: 600; }
+.primary { background: var(--wood); border: 0; color: var(--wood-ink); }
+.outline { background: none; border: 1px solid var(--line-strong); }
+.outline.danger { border-color: var(--lost); color: var(--lost); }
+
+.result { display: flex; flex-direction: column; gap: 10px; }
+.verdict-line { display: flex; flex-direction: column; gap: 10px; }
+.verdict { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.verdict.won { color: var(--won); }
+.verdict.lost { color: var(--lost); }
+.margin { font-size: 17px; font-weight: 600; }
+.count { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.count th, .count td { padding: 4px 0; text-align: right; font-weight: 400; }
+.count th:first-child { text-align: left; color: var(--muted); }
+.count tr:first-child th { color: var(--muted); font-size: 13px; }
+.count tr.total th, .count tr.total td { border-top: 1px solid var(--line-strong); font-weight: 700; color: var(--text); padding-top: 8px; }
+.rank-change { font-weight: 600; }
+.rules { margin-top: auto; font-size: 12px; }
+
+/* A phone upright: the board across the whole width, the panel under it. */
+@media (max-width: 720px) {
+  #app { flex-direction: column; }
+  .board-area { flex: none; padding: 6px; }
+  /* The panel keeps room for the rank, the players and the buttons. */
+  #board { height: auto; max-height: calc(100dvh - 260px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .side { flex: 1; width: auto; gap: 14px; padding: 16px 18px; border-left: 0; border-top: 1px solid var(--line); }
+  .rank { flex-direction: row; align-items: baseline; gap: 10px; }
+  .rank-value { font-size: 26px; }
+  .verdict { font-size: 24px; }
+  /* After the game everything fits on the screen: the verdict and the margin in one line, a tighter
+     count, the board a little smaller; the players, handicap and rules line wait for the next game. */
+  #app.over #board { max-height: calc(100dvh - 330px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  #app.over .players, #app.over .handicap, #app.over .rules { display: none; }
+  #app.over .side { gap: 12px; padding-top: 12px; padding-bottom: 12px; }
+  .result { gap: 8px; }
+  .verdict-line { flex-direction: row; align-items: baseline; gap: 12px; }
+  .count th, .count td { padding: 2px 0; }
+  .count tr.total th, .count tr.total td { padding-top: 5px; }
+}
+
+/* G · READ */
+.task { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; }
+.footer { margin-top: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 12px; }
+.link { background: none; border: 0; padding: 0; font-size: 12px; color: var(--wood); text-decoration: underline; text-underline-offset: 2px; }
+@media (max-width: 720px) {
+  #board { max-height: calc(100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  #app.over #board { max-height: calc(100dvh - 250px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .verdict { font-size: 24px; }
+}
+.credit { flex-basis: 100%; color: var(--muted); font-size: 11px; }

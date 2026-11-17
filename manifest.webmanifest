@@ -1,0 +1,12 @@
+{
+  "name": "G · READ",
+  "short_name": "G Read",
+  "description": "Задачи го на счёт по твоему рангу",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#111316",
+  "theme_color": "#111316",
+  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+}

@@ -1,0 +1,356 @@
+/** One screen: your rank, a problem of that difficulty, then right or wrong and the rank after it. */
+import { play, isLegal } from './rules.mjs';
+import { answer, nextKyu, pickProblem, playLine, problemPosition, rankText, size, solutionLine, startKyu, strongestKyu, viewOf, weakestKyu } from './problems.mjs';
+import { loadCollections, loadState, saveCollection, saveState } from './store.mjs';
+import { playStone, wakeSound } from './sound.mjs';
+
+const historyLimit = 5000;
+const replyPause = 350;
+const version = document.querySelector('meta[name="read-version"]')?.content ?? '';
+const root = document.getElementById('app');
+
+/** Every problem the page knows: the built-in ones and the collections loaded from files. */
+let problems = [];
+let byId = new Map();
+let state = { version: 1, kyu: startKyu, seen: {}, current: null, history: [] };
+/** The opponent's reply is on its way. */
+let busy = false;
+let note = '';
+let ghost = null;
+let showSolution = false;
+
+function validState(value) {
+  if (!value || typeof value !== 'object' || value.version !== 1) return null;
+  if (!Number.isInteger(value.kyu) || value.kyu > weakestKyu || value.kyu < strongestKyu) return null;
+  const current = value.current && byId.has(value.current.id) && Array.isArray(value.current.moves) ? value.current : null;
+  return { ...value, seen: value.seen && typeof value.seen === 'object' ? value.seen : {}, current, history: Array.isArray(value.history) ? value.history : [] };
+}
+function save() {
+  const error = saveState(state);
+  if (error) note = `Не сохранено: ${error}`;
+}
+
+/* The problem */
+const problemOf = () => byId.get(state.current.id);
+/** The position now and the tree you go on from, walking your moves and the replies. */
+function walk() {
+  const problem = problemOf();
+  let tree = problem.tree;
+  const position = playLine(problemPosition(problem), state.current.moves);
+  const { moves } = state.current;
+  for (let i = 0; i < moves.length && tree; i += 2) {
+    const step = answer(tree, moves[i]);
+    tree = step.verdict === 'on' ? step.tree : null;
+  }
+  return { position, tree };
+}
+const yourTurn = () => state.current?.status === 'playing' && !busy;
+
+function nextProblem() {
+  const problem = pickProblem(problems, state.kyu, state.seen);
+  showSolution = false;
+  note = '';
+  state.current = problem ? { id: problem.id, kyu: state.kyu, moves: [], status: 'playing' } : null;
+  save();
+  render();
+}
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function userMove(point) {
+  if (!yourTurn()) return;
+  const { position, tree } = walk();
+  try { play(position, point); } catch (error) {
+    note = error.message;
+    render();
+    return;
+  }
+  note = '';
+  ghost = null;
+  const { current } = state;
+  current.moves.push(point);
+  playStone();
+  const step = answer(tree, point);
+  if (step.reply !== null) {
+    busy = true;
+    render();
+    await pause(replyPause);
+    busy = false;
+    if (state.current !== current) return;
+    current.moves.push(step.reply);
+    playStone();
+  }
+  if (step.verdict === 'on') {
+    save();
+    render();
+    return;
+  }
+  finish(step.verdict === 'solved');
+}
+function finish(solved) {
+  const { current } = state;
+  const problem = problemOf();
+  current.status = solved ? 'solved' : 'failed';
+  current.kyuAfter = nextKyu(current.kyu, solved);
+  state.kyu = current.kyuAfter;
+  state.seen[current.id] = Date.now();
+  state.history.push({ date: new Date().toISOString(), id: current.id, rank: problem.rank, kyu: current.kyu, solved });
+  if (state.history.length > historyLimit) state.history.splice(0, state.history.length - historyLimit);
+  save();
+  render();
+}
+
+/* The board: the part of 19 × 19 the problem stands on */
+const svgSpace = 'http://www.w3.org/2000/svg';
+const cell = 64;
+const edge = cell * 0.7;
+const stoneRadius = cell * 0.47;
+const stars = [3, 9, 15];
+const inks = { 1: '#0e0f11', 2: '#f7f6f1' };
+
+function svgNode(tag, attributes = {}, text = null) {
+  const node = document.createElementNS(svgSpace, tag);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  if (text !== null) node.textContent = text;
+  return node;
+}
+function geometry(view) {
+  const columns = view.right - view.left + 1;
+  const rows = view.bottom - view.top + 1;
+  const x = (column) => edge + (column - view.left) * cell;
+  const y = (row) => edge + (row - view.top) * cell;
+  return { width: edge * 2 + cell * (columns - 1), height: edge * 2 + cell * (rows - 1), x, y };
+}
+function stoneNode(at, point, color, opacity = 1) {
+  const cx = at.x(point % size);
+  const cy = at.y(Math.floor(point / size));
+  const group = svgNode('g', { opacity });
+  group.append(svgNode('circle', { cx: cx + 1, cy: cy + 2.5, r: stoneRadius, fill: '#28190a', opacity: 0.35 }));
+  group.append(svgNode('circle', { cx, cy, r: stoneRadius, fill: `url(#stone-${color})` }));
+  return group;
+}
+function drawBoard(svg, view, shown, { numbers = null, toPlay } = {}) {
+  const at = geometry(view);
+  svg.replaceChildren();
+  const defs = svgNode('defs');
+  for (const [color, stops] of [[1, [['0%', '#5b5e63'], ['55%', '#1c1d20'], ['100%', '#0e0f11']]], [2, [['0%', '#ffffff'], ['60%', '#efede6'], ['100%', '#c8c5ba']]]]) {
+    const gradient = svgNode('radialGradient', { id: `stone-${color}`, cx: '36%', cy: '30%', r: '75%' });
+    for (const [offset, ink] of stops) gradient.append(svgNode('stop', { offset, 'stop-color': ink }));
+    defs.append(gradient);
+  }
+  svg.append(defs, svgNode('rect', { width: at.width, height: at.height, rx: 10, fill: '#ddb56c' }));
+  // Lines run out to the frame where the board goes on, and stop at the board's edge.
+  const fromX = view.left === 0 ? at.x(0) : 0;
+  const toX = view.right === size - 1 ? at.x(size - 1) : at.width;
+  const fromY = view.top === 0 ? at.y(0) : 0;
+  const toY = view.bottom === size - 1 ? at.y(size - 1) : at.height;
+  let lines = '';
+  for (let row = view.top; row <= view.bottom; row++) lines += `M${fromX} ${at.y(row)}H${toX}`;
+  for (let column = view.left; column <= view.right; column++) lines += `M${at.x(column)} ${fromY}V${toY}`;
+  svg.append(svgNode('path', { d: lines, stroke: '#6e5228', 'stroke-width': 1.4, fill: 'none' }));
+  for (const row of stars) {
+    for (const column of stars) {
+      if (row < view.top || row > view.bottom || column < view.left || column > view.right) continue;
+      svg.append(svgNode('circle', { cx: at.x(column), cy: at.y(row), r: 4.5, fill: '#5a4320' }));
+    }
+  }
+  shown.board.forEach((color, point) => {
+    if (color) svg.append(stoneNode(at, point, color));
+  });
+  if (ghost !== null) svg.append(stoneNode(at, ghost, toPlay, 0.5));
+  if (numbers) {
+    for (const [point, number] of numbers) {
+      if (!shown.board[point]) continue;
+      svg.append(svgNode('text', { x: at.x(point % size), y: at.y(Math.floor(point / size)), fill: inks[3 - shown.board[point]], 'font-size': 26, 'font-weight': 600, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-family': '-apple-system, sans-serif' }, String(number)));
+    }
+  } else if (shown.last !== null && shown.board[shown.last]) {
+    const point = shown.last;
+    svg.append(svgNode('circle', { cx: at.x(point % size), cy: at.y(Math.floor(point / size)), r: stoneRadius * 0.55, fill: 'none', stroke: inks[3 - shown.board[point]], 'stroke-width': 3 }));
+  }
+}
+/** A finger aims this far above itself, so it does not cover the stone it carries. */
+const fingerLift = cell * 0.75;
+function pointAt(svg, view, event) {
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return null;
+  const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+  const lift = event.pointerType === 'touch' ? fingerLift : 0;
+  const column = view.left + Math.round((local.x - edge) / cell);
+  const row = view.top + Math.round((local.y - lift - edge) / cell);
+  if (column < view.left || column > view.right || row < view.top || row > view.bottom) return null;
+  return row * size + column;
+}
+function boardView() {
+  const problem = problemOf();
+  const view = viewOf(problem);
+  const at = geometry(view);
+  const svg = svgNode('svg', { id: 'board', viewBox: `0 0 ${at.width} ${at.height}`, role: 'img', 'aria-label': 'Задача' });
+  let shown;
+  let options = {};
+  if (showSolution) {
+    const line = solutionLine(problem.tree);
+    shown = playLine(problemPosition(problem), line);
+    options = { numbers: line.map((point, index) => [point, index + 1]).reverse() };
+  } else {
+    shown = walk().position;
+    options = { toPlay: shown.toPlay };
+  }
+  const active = yourTurn() && !showSolution;
+  svg.classList.toggle('active', active);
+  drawBoard(svg, view, shown, options);
+  if (active) {
+    // A mouse shows the ghost stone on hover. A finger shows it while pressed, three quarters of a point
+    // above itself, and drags it about; the stone lands where the ghost is when the finger lifts.
+    let pressed = false;
+    const showGhost = (event) => {
+      const point = pointAt(svg, view, event);
+      const next = point !== null && isLegal(shown, point) ? point : null;
+      if (next === ghost) return;
+      ghost = next;
+      drawBoard(svg, view, shown, options);
+    };
+    svg.addEventListener('pointerdown', (event) => {
+      if (!event.isPrimary || event.button !== 0) return;
+      pressed = true;
+      try { svg.setPointerCapture(event.pointerId); } catch { /* the pointer is already gone */ }
+      showGhost(event);
+    });
+    svg.addEventListener('pointermove', (event) => {
+      if (pressed || event.pointerType === 'mouse') showGhost(event);
+    });
+    svg.addEventListener('pointerup', (event) => {
+      if (!pressed) return;
+      pressed = false;
+      const point = pointAt(svg, view, event);
+      if (point !== null) userMove(point);
+      else if (ghost !== null) {
+        ghost = null;
+        drawBoard(svg, view, shown, options);
+      }
+    });
+    const drop = () => {
+      pressed = false;
+      if (ghost === null) return;
+      ghost = null;
+      drawBoard(svg, view, shown, options);
+    };
+    svg.addEventListener('pointercancel', drop);
+    svg.addEventListener('pointerleave', (event) => {
+      if (!pressed && event.pointerType === 'mouse') drop();
+    });
+  }
+  const area = el('div', 'board-area');
+  area.append(svg);
+  return area;
+}
+
+/* The panel */
+function el(tag, className = '', text = null) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== null) node.textContent = text;
+  return node;
+}
+function button(label, className, action, disabled = false) {
+  const node = el('button', className, label);
+  node.type = 'button';
+  node.disabled = disabled;
+  node.addEventListener('click', action);
+  return node;
+}
+const sideName = { B: 'Чёрные', W: 'Белые' };
+const goalText = { live: ' и живут', kill: ' и убивают' };
+function taskText(problem) {
+  return `${sideName[problem.play]} начинают${goalText[problem.goal] ?? ''}`;
+}
+function resultBlock() {
+  const { current } = state;
+  const solved = current.status === 'solved';
+  const block = el('section', 'result');
+  block.append(el('p', `verdict ${solved ? 'won' : 'lost'}`, solved ? 'Верно' : 'Ошибка'));
+  const moved = current.kyuAfter !== current.kyu;
+  block.append(el('p', 'rank-change', moved ? `Ранг: ${rankText(current.kyu)} → ${rankText(current.kyuAfter)}` : `Ранг остался ${rankText(current.kyu)}`));
+  return block;
+}
+function sidePanel() {
+  const side = el('aside', 'side');
+  const rank = el('div', 'rank');
+  rank.append(el('span', 'rank-label', 'Твой ранг'), el('span', 'rank-value', rankText(state.kyu)));
+  side.append(rank);
+  const { current } = state;
+  if (!current) {
+    side.append(el('p', 'muted', problems.length ? 'Задачи на счёт: найди ход и доведи решение до конца. Верное решение поднимает ранг на ступень, ошибка опускает на две.' : 'Задачи не загрузились.'));
+    if (problems.length) side.append(button('Начать', 'primary', nextProblem));
+  } else {
+    const problem = problemOf();
+    const task = el('div', 'task');
+    task.append(el('span', `stone-mark ${problem.play === 'B' ? 'black' : 'white'}`), el('span', 'task-text', taskText(problem)));
+    side.append(task);
+    if (current.status === 'playing') {
+      side.append(el('p', 'status', busy ? 'Ответ…' : 'Твой ход'));
+    } else {
+      side.append(resultBlock());
+      const actions = el('div', 'actions');
+      if (current.status === 'failed') actions.append(button(showSolution ? 'Скрыть' : 'Решение', 'outline', () => { showSolution = !showSolution; render(); }));
+      actions.append(button('Дальше', 'primary', nextProblem));
+      side.append(actions);
+    }
+  }
+  if (note) side.append(el('p', 'note', note));
+  side.append(collectionsBlock());
+  return side;
+}
+function collectionsBlock() {
+  const block = el('div', 'footer muted');
+  const picker = el('input');
+  picker.type = 'file';
+  picker.accept = '.json,application/json';
+  picker.hidden = true;
+  picker.addEventListener('change', () => importFile(picker.files?.[0]));
+  block.append(el('span', '', `Задач: ${problems.length}${version ? ` · версия ${version}` : ''}`), button('Загрузить сборник', 'link', () => picker.click()), picker);
+  // The license of Go Game Guru's problems asks for their name, the license and a note of the changes.
+  const credit = el('a', 'credit', 'Задачи Go Game Guru, CC BY-NC-SA 4.0, ответы в другом формате');
+  credit.href = 'https://github.com/gogameguru/go-problems';
+  credit.target = '_blank';
+  credit.rel = 'noopener';
+  block.append(credit);
+  return block;
+}
+
+/** A collection file made on the Mac: { name, problems }. It replaces a loaded one of the same name. */
+async function importFile(file) {
+  if (!file) return;
+  try {
+    const collection = JSON.parse(await file.text());
+    if (typeof collection?.name !== 'string' || !Array.isArray(collection.problems) || !collection.problems.length) throw new Error('это не сборник задач');
+    for (const problem of collection.problems) {
+      if (typeof problem.id !== 'string' || typeof problem.tree !== 'object' || !['B', 'W'].includes(problem.play)) throw new Error(`задача ${problem.id ?? '?'} не читается`);
+    }
+    await saveCollection(collection);
+    await loadProblems();
+    note = `Сборник «${collection.name}» загружен: ${collection.problems.length} задач.`;
+  } catch (error) {
+    note = `Сборник не загружен: ${error.message}`;
+  }
+  render();
+}
+
+function render() {
+  root.classList.toggle('over', Boolean(state.current && state.current.status !== 'playing'));
+  root.replaceChildren(...(state.current ? [boardView()] : [el('div', 'board-area')]), sidePanel());
+}
+
+async function loadProblems() {
+  const builtIn = await fetch('problems/ggg.json').then((response) => (response.ok ? response.json() : [])).catch(() => []);
+  const collections = await loadCollections();
+  problems = [...builtIn, ...collections.flatMap((collection) => collection.problems)];
+  byId = new Map(problems.map((problem) => [problem.id, problem]));
+}
+
+async function start() {
+  await loadProblems();
+  const loaded = loadState();
+  state = validState(loaded) ?? state;
+  if (loaded && !validState(loaded)) note = 'Сохранение не прочитано, начато заново.';
+  document.addEventListener('pointerdown', wakeSound);
+  render();
+}
+start();
