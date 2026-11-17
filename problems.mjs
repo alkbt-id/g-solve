@@ -106,18 +106,28 @@ export function viewOf(problem, least = 7) {
 export const weakestKyu = 30;
 export const strongestKyu = -8;
 export const startKyu = 20;
-/** The rank in words, rounded to a whole rank: the rank itself moves in quarters. */
+/** The rank in words, rounded to a whole rank; the rating under it moves in tenths. */
 export const rankText = (kyu) => {
   const whole = Math.round(kyu);
   return whole >= 1 ? `${whole} кю` : `${1 - whole} дан`;
 };
+
 /**
- * A solved problem moves the rank a quarter step up, a mistake half a step down: four solved problems
- * make a rank, and the rank settles where you solve about two problems in three.
+ * The rank is a rating, like Elo, in kyu. Before a problem the chance to solve it comes from how much
+ * easier it is than your rank: even odds at your own rank, the odds ×e^0.5 for each rank easier. After it
+ * the rank moves by the surprise, the result (1 or 0) minus the chance, times a step that starts large
+ * and shrinks as problems are done: a new player finds the level fast, a settled one moves slowly.
  */
-export const solvedStep = 0.25;
-export const missedStep = 0.5;
-export const nextKyu = (kyu, solved) => Math.min(weakestKyu, Math.max(strongestKyu, Math.round((kyu + (solved ? -solvedStep : missedStep)) * 100) / 100));
+export const oddsPerRank = 0.5;
+export const solveChance = (kyu, problemRank) => 1 / (1 + Math.exp(-oddsPerRank * (problemRank - kyu)));
+export const ratingStep = (done) => Math.max(0.6, 2.5 / (1 + done / 15));
+export function nextKyu(kyu, problemRank, solved, done) {
+  const surprise = (solved ? 1 : 0) - solveChance(kyu, problemRank);
+  const next = kyu - ratingStep(done) * surprise;
+  return Math.min(weakestKyu, Math.max(strongestKyu, Math.round(next * 100) / 100));
+}
+/** Problems are picked this much easier than the rank, where the chance to solve them is two in three. */
+export const pickEasier = Math.log(2) / oddsPerRank;
 
 /**
  * A problem for the rank: one not tried yet, among the closest by difficulty, at random; when all

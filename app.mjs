@@ -1,6 +1,6 @@
 /** One screen: your rank, a problem of that difficulty, then right or wrong and the rank after it. */
 import { play, isLegal } from './rules.mjs';
-import { answer, nextKyu, pickProblem, playLine, problemPosition, rankText, size, solutionLine, startKyu, strongestKyu, viewOf, weakestKyu } from './problems.mjs';
+import { answer, nextKyu, pickEasier, pickProblem, playLine, problemPosition, rankText, size, solutionLine, startKyu, strongestKyu, viewOf, weakestKyu } from './problems.mjs';
 import { loadCollections, loadState, saveCollection, saveState } from './store.mjs';
 import { playStone, wakeSound } from './sound.mjs';
 
@@ -49,7 +49,7 @@ function walk() {
 const yourTurn = () => state.current?.status === 'playing' && !busy;
 
 function nextProblem() {
-  const problem = pickProblem(problems, state.kyu, state.seen);
+  const problem = pickProblem(problems, state.kyu + pickEasier, state.seen);
   showSolution = false;
   note = '';
   state.current = problem ? { id: problem.id, kyu: state.kyu, moves: [], status: 'playing' } : null;
@@ -91,7 +91,7 @@ function finish(solved) {
   const { current } = state;
   const problem = problemOf();
   current.status = solved ? 'solved' : 'failed';
-  current.kyuAfter = nextKyu(current.kyu, solved);
+  current.kyuAfter = nextKyu(current.kyu, problem.rank, solved, state.history.length);
   state.kyu = current.kyuAfter;
   state.seen[current.id] = Date.now();
   state.history.push({ date: new Date().toISOString(), id: current.id, rank: problem.rank, kyu: current.kyu, solved });
@@ -272,7 +272,10 @@ function resultBlock() {
   const block = el('section', 'result');
   block.append(el('p', `verdict ${solved ? 'won' : 'lost'}`, solved ? 'Верно' : 'Ошибка'));
   const moved = rankText(current.kyuAfter) !== rankText(current.kyu);
-  block.append(el('p', 'rank-change', moved ? `Ранг: ${rankText(current.kyu)} → ${rankText(current.kyuAfter)}` : `Ранг остался ${rankText(current.kyu)}`));
+  // Up is stronger: fewer kyu.
+  const change = Math.round((current.kyu - current.kyuAfter) * 10) / 10;
+  const changeText = change ? ` (${change > 0 ? '+' : '−'}${Math.abs(change).toLocaleString('ru-RU')})` : '';
+  block.append(el('p', 'rank-change', moved ? `Ранг: ${rankText(current.kyu)} → ${rankText(current.kyuAfter)}${changeText}` : `Ранг ${rankText(current.kyuAfter)}${changeText}`));
   return block;
 }
 function toggleSolution() {
@@ -306,7 +309,7 @@ function sidePanel() {
   side.append(rank);
   const { current } = state;
   if (!current) {
-    side.append(el('p', 'muted', problems.length ? 'Задачи на счёт: найди ход и доведи решение до конца. Четыре верных решения поднимают ранг на ступень, ошибка опускает на полступени.' : 'Задачи не загрузились.'));
+    side.append(el('p', 'muted', problems.length ? 'Задачи на счёт: найди ход и доведи решение до конца. Ранг считается как рейтинг: решил задачу, которую от тебя не ждали, — он растёт сильнее, ошибся в лёгкой — сильнее падает.' : 'Задачи не загрузились.'));
     if (problems.length) side.append(button('Начать', 'primary', nextProblem));
   } else {
     const problem = problemOf();
