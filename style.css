@@ -94,3 +94,6 @@ button:focus-visible { outline: 2px solid var(--wood); outline-offset: 2px; }
   .verdict { font-size: 24px; }
 }
 .credit { flex-basis: 100%; color: var(--muted); font-size: 11px; }
+.steps { display: flex; align-items: center; gap: 8px; }
+.steps .step { flex: none; width: 56px; font-size: 22px; line-height: 1; }
+.step-count { flex: 1; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }

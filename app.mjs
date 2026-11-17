@@ -18,6 +18,8 @@ let busy = false;
 let note = '';
 let ghost = null;
 let showSolution = false;
+/** How many moves of the solution are on the board while it is shown. */
+let solutionStep = 0;
 
 function validState(value) {
   if (!value || typeof value !== 'object' || value.version !== 1) return null;
@@ -186,9 +188,10 @@ function boardView() {
   let shown;
   let options = {};
   if (showSolution) {
-    const line = solutionLine(problem.tree);
+    // One move at a time, so captures are seen as they happen; a point played twice shows its last number.
+    const line = solutionLine(problem.tree).slice(0, solutionStep);
     shown = playLine(problemPosition(problem), line);
-    options = { numbers: line.map((point, index) => [point, index + 1]).reverse() };
+    options = { numbers: new Map(line.map((point, index) => [point, index + 1])) };
   } else {
     shown = walk().position;
     options = { toPlay: shown.toPlay };
@@ -196,6 +199,8 @@ function boardView() {
   const active = yourTurn() && !showSolution;
   svg.classList.toggle('active', active);
   drawBoard(svg, view, shown, options);
+  // While the solution is shown a tap on the board plays its next move.
+  if (showSolution) svg.addEventListener('click', () => stepSolution(1));
   if (active) {
     // A mouse shows the ghost stone on hover. A finger shows it while pressed, three quarters of a point
     // above itself, and drags it about; the stone lands where the ghost is when the finger lifts.
@@ -270,6 +275,30 @@ function resultBlock() {
   block.append(el('p', 'rank-change', moved ? `Ранг: ${rankText(current.kyu)} → ${rankText(current.kyuAfter)}` : `Ранг остался ${rankText(current.kyu)}`));
   return block;
 }
+function toggleSolution() {
+  showSolution = !showSolution;
+  solutionStep = 0;
+  render();
+}
+function stepSolution(by) {
+  const length = solutionLine(problemOf().tree).length;
+  const next = Math.max(0, Math.min(length, solutionStep + by));
+  if (next === solutionStep) return;
+  solutionStep = next;
+  if (by > 0) playStone();
+  render();
+}
+/** Back, the move count, forward. */
+function solutionSteps() {
+  const length = solutionLine(problemOf().tree).length;
+  const row = el('div', 'steps');
+  row.append(button('‹', 'outline step', () => stepSolution(-1), solutionStep === 0),
+    el('span', 'step-count', solutionStep === 0 ? `Решение: ${length} ${movesWord(length)}` : `Ход ${solutionStep} из ${length}`),
+    button('›', 'outline step', () => stepSolution(1), solutionStep === length));
+  return row;
+}
+const movesWord = (count) => (count % 10 === 1 && count % 100 !== 11 ? 'ход' : [2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100) ? 'хода' : 'ходов');
+
 function sidePanel() {
   const side = el('aside', 'side');
   const rank = el('div', 'rank');
@@ -289,7 +318,8 @@ function sidePanel() {
     } else {
       side.append(resultBlock());
       const actions = el('div', 'actions');
-      if (current.status === 'failed') actions.append(button(showSolution ? 'Скрыть' : 'Решение', 'outline', () => { showSolution = !showSolution; render(); }));
+      if (showSolution) side.append(solutionSteps());
+      if (current.status === 'failed') actions.append(button(showSolution ? 'Скрыть' : 'Решение', 'outline', toggleSolution));
       actions.append(button('Дальше', 'primary', nextProblem));
       side.append(actions);
     }
