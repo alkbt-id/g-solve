@@ -23,7 +23,7 @@ let solutionStep = 0;
 
 function validState(value) {
   if (!value || typeof value !== 'object' || value.version !== 1) return null;
-  if (!Number.isInteger(value.kyu) || value.kyu > weakestKyu || value.kyu < strongestKyu) return null;
+  if (!Number.isFinite(value.kyu) || value.kyu > weakestKyu || value.kyu < strongestKyu) return null;
   const current = value.current && byId.has(value.current.id) && Array.isArray(value.current.moves) ? value.current : null;
   return { ...value, seen: value.seen && typeof value.seen === 'object' ? value.seen : {}, current, history: Array.isArray(value.history) ? value.history : [] };
 }
@@ -271,7 +271,7 @@ function resultBlock() {
   const solved = current.status === 'solved';
   const block = el('section', 'result');
   block.append(el('p', `verdict ${solved ? 'won' : 'lost'}`, solved ? 'Верно' : 'Ошибка'));
-  const moved = current.kyuAfter !== current.kyu;
+  const moved = rankText(current.kyuAfter) !== rankText(current.kyu);
   block.append(el('p', 'rank-change', moved ? `Ранг: ${rankText(current.kyu)} → ${rankText(current.kyuAfter)}` : `Ранг остался ${rankText(current.kyu)}`));
   return block;
 }
@@ -306,7 +306,7 @@ function sidePanel() {
   side.append(rank);
   const { current } = state;
   if (!current) {
-    side.append(el('p', 'muted', problems.length ? 'Задачи на счёт: найди ход и доведи решение до конца. Верное решение поднимает ранг на ступень, ошибка опускает на две.' : 'Задачи не загрузились.'));
+    side.append(el('p', 'muted', problems.length ? 'Задачи на счёт: найди ход и доведи решение до конца. Четыре верных решения поднимают ранг на ступень, ошибка опускает на полступени.' : 'Задачи не загрузились.'));
     if (problems.length) side.append(button('Начать', 'primary', nextProblem));
   } else {
     const problem = problemOf();

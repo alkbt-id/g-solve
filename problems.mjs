@@ -106,9 +106,18 @@ export function viewOf(problem, least = 7) {
 export const weakestKyu = 30;
 export const strongestKyu = -8;
 export const startKyu = 20;
-export const rankText = (kyu) => (kyu >= 1 ? `${kyu} кю` : `${1 - kyu} дан`);
-/** A solved problem takes the rank one step up, a mistake two down: you solve about two problems in three. */
-export const nextKyu = (kyu, solved) => Math.min(weakestKyu, Math.max(strongestKyu, kyu + (solved ? -1 : 2)));
+/** The rank in words, rounded to a whole rank: the rank itself moves in quarters. */
+export const rankText = (kyu) => {
+  const whole = Math.round(kyu);
+  return whole >= 1 ? `${whole} кю` : `${1 - whole} дан`;
+};
+/**
+ * A solved problem moves the rank a quarter step up, a mistake half a step down: four solved problems
+ * make a rank, and the rank settles where you solve about two problems in three.
+ */
+export const solvedStep = 0.25;
+export const missedStep = 0.5;
+export const nextKyu = (kyu, solved) => Math.min(weakestKyu, Math.max(strongestKyu, Math.round((kyu + (solved ? -solvedStep : missedStep)) * 100) / 100));
 
 /**
  * A problem for the rank: one not tried yet, among the closest by difficulty, at random; when all
