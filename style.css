@@ -88,9 +88,13 @@ button:focus-visible { outline: 2px solid var(--wood); outline-offset: 2px; }
 .task { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; }
 .footer { margin-top: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 12px; }
 .link { background: none; border: 0; padding: 0; font-size: 12px; color: var(--wood); text-decoration: underline; text-underline-offset: 2px; }
+/* A phone upright: the panel takes the height its content needs, the board the rest. No 100dvh here: on
+   the iPhone home screen it is taller than the space the page gets, and the panel was cut off below. */
 @media (max-width: 720px) {
-  #board { max-height: calc(100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
-  #app.over #board { max-height: calc(100dvh - 250px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  html { background: var(--panel); }
+  .board-area { flex: 1 1 0; min-height: 0; }
+  #board, #app.over #board { width: 100%; height: 100%; max-height: none; }
+  .side, #app.over .side { flex: none; overflow: visible; }
   .verdict { font-size: 24px; }
 }
 .credit { flex-basis: 100%; color: var(--muted); font-size: 11px; }
