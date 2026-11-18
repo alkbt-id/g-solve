@@ -9,7 +9,7 @@ const replyPause = 350;
 const version = document.querySelector('meta[name="read-version"]')?.content ?? '';
 const root = document.getElementById('app');
 
-/** Every problem the page knows: the built-in ones and the collections loaded from files. */
+/** Every problem the page knows: those of the collections loaded from files. */
 let problems = [];
 let byId = new Map();
 let state = { version: 1, kyu: startKyu, seen: {}, current: null, history: [] };
@@ -309,7 +309,7 @@ function sidePanel() {
   side.append(rank);
   const { current } = state;
   if (!current) {
-    side.append(el('p', 'muted', problems.length ? 'Задачи на счёт: найди ход и доведи решение до конца. Ранг считается как рейтинг: решил задачу, которую от тебя не ждали, — он растёт сильнее, ошибся в лёгкой — сильнее падает.' : 'Задачи не загрузились.'));
+    side.append(el('p', 'muted', problems.length ? 'Задачи на счёт: найди ход и доведи решение до конца. Ранг считается как рейтинг: решил задачу, которую от тебя не ждали, — он растёт сильнее, ошибся в лёгкой — сильнее падает.' : 'Задач пока нет. Загрузи сборник, собранный на Mac: «Загрузить сборник» внизу, файл в iCloud Drive → G Read.'));
     if (problems.length) side.append(button('Начать', 'primary', nextProblem));
   } else {
     const problem = problemOf();
@@ -339,12 +339,6 @@ function collectionsBlock() {
   picker.hidden = true;
   picker.addEventListener('change', () => importFile(picker.files?.[0]));
   block.append(el('span', '', `Задач: ${problems.length}${version ? ` · версия ${version}` : ''}`), button('Загрузить сборник', 'link', () => picker.click()), picker);
-  // The license of Go Game Guru's problems asks for their name, the license and a note of the changes.
-  const credit = el('a', 'credit', 'Задачи Go Game Guru, CC BY-NC-SA 4.0, ответы в другом формате');
-  credit.href = 'https://github.com/gogameguru/go-problems';
-  credit.target = '_blank';
-  credit.rel = 'noopener';
-  block.append(credit);
   return block;
 }
 
@@ -372,9 +366,9 @@ function render() {
 }
 
 async function loadProblems() {
-  const builtIn = await fetch('problems/ggg.json').then((response) => (response.ok ? response.json() : [])).catch(() => []);
+  // The page has no problems of its own: they come from collections loaded from files.
   const collections = await loadCollections();
-  problems = [...builtIn, ...collections.flatMap((collection) => collection.problems)];
+  problems = collections.flatMap((collection) => collection.problems);
   byId = new Map(problems.map((problem) => [problem.id, problem]));
 }
 
