@@ -16,24 +16,44 @@ export function takeSamples(text) {
 
 let audio = null;
 let stoneBuffers = null;
+/** Wall time and sound time at the last look: a sound whose clock stands still is dead. */
+let lastLook = null;
+
+function dropSound() {
+  audio?.close().catch(() => {});
+  audio = null;
+  stoneBuffers = null;
+  lastLook = null;
+}
 /**
- * WebKit keeps sound off until the player touches the page, so every touch opens it again.
- * Safari 'interrupts' sound when the phone locks, another app plays or a call comes, and such a sound
- * often stays mute after resume(): it is replaced by a new one, made inside the touch.
+ * A sound that says it runs may still be mute: Safari leaves it so after the page sleeps in the
+ * background (most of all from the home screen), and a Mac after the speakers or headphones change.
+ * Its clock then stands still, or it says 'interrupted'.
  */
+function soundIsDead() {
+  if (audio.state === 'interrupted' || audio.state === 'closed') return true;
+  if (audio.state !== 'running' || !lastLook) return false;
+  const wall = (performance.now() - lastLook.wall) / 1000;
+  return wall > 0.2 && audio.currentTime - lastLook.sound < wall / 4;
+}
+/** WebKit keeps sound off until the player touches the page, so a dead sound is replaced inside a touch. */
 export function wakeSound() {
   if (!window.AudioContext) return;
-  if (audio && (audio.state === 'interrupted' || audio.state === 'closed')) {
-    audio.close().catch(() => {});
-    audio = null;
-    stoneBuffers = null;
-  }
+  if (audio && soundIsDead()) dropSound();
   audio ??= new AudioContext();
   if (audio.state !== 'running') audio.resume().catch(() => {});
+  lastLook = { wall: performance.now(), sound: audio.currentTime };
 }
-/** Opens sound on every kind of touch: a finger counts on release, a mouse and keys on press. */
+/**
+ * Opens sound on every kind of touch: a finger counts on release, a mouse and keys on press.
+ * A page back from the background, or new speakers, get a new sound on the next touch.
+ */
 export function listenForSound() {
   for (const type of ['pointerdown', 'pointerup', 'keydown']) document.addEventListener(type, wakeSound, true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') dropSound();
+  });
+  navigator.mediaDevices?.addEventListener?.('devicechange', dropSound);
 }
 
 function strike() {
