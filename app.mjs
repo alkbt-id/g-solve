@@ -2,7 +2,7 @@
 import { play, isLegal } from './rules.mjs';
 import { answer, nextKyu, pairOf, pickEasier, pickProblem, playLine, problemPosition, rankText, size, solutionLine, startKyu, strongestKyu, viewOf, weakestKyu } from './problems.mjs';
 import { loadCollections, loadState, saveCollection, saveState } from './store.mjs';
-import { playStone, wakeSound } from './sound.mjs';
+import { listenForSound, playStone } from './sound.mjs';
 
 const historyLimit = 5000;
 const replyPause = 350;
@@ -413,7 +413,7 @@ async function start() {
   const loaded = loadState();
   state = validState(loaded) ?? state;
   if (loaded && !validState(loaded)) note = 'Сохранение не прочитано, начато заново.';
-  document.addEventListener('pointerdown', wakeSound);
+  listenForSound();
   render();
 }
 start();
