@@ -355,7 +355,11 @@ async function importFile(file) {
     await loadProblems();
     note = `Сборник «${collection.name}» загружен: ${collection.problems.length} задач.`;
   } catch (error) {
-    note = `Сборник не загружен: ${error.message}`;
+    // Safari cannot read a file iCloud has not finished downloading to the phone, or has just replaced.
+    const notHere = error.name === 'NotFoundError' || error.name === 'NotReadableError';
+    note = notHere
+      ? 'Сборник не загружен: файл ещё не скачан из iCloud. Открой его в «Файлах» (iCloud Drive → G Read), дождись, пока он скачается, и выбери снова.'
+      : `Сборник не загружен: ${error.message}`;
   }
   render();
 }
