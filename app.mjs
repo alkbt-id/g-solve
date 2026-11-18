@@ -1,6 +1,6 @@
 /** One screen: your rank, a problem of that difficulty, then right or wrong and the rank after it. */
 import { play, isLegal } from './rules.mjs';
-import { answer, nextKyu, pickEasier, pickProblem, playLine, problemPosition, rankText, size, solutionLine, startKyu, strongestKyu, viewOf, weakestKyu } from './problems.mjs';
+import { answer, nextKyu, pairOf, pickEasier, pickProblem, playLine, problemPosition, rankText, size, solutionLine, startKyu, strongestKyu, viewOf, weakestKyu } from './problems.mjs';
 import { loadCollections, loadState, saveCollection, saveState } from './store.mjs';
 import { playStone, wakeSound } from './sound.mjs';
 
@@ -52,7 +52,7 @@ function nextProblem() {
   const problem = pickProblem(problems, state.kyu + pickEasier, state.seen);
   showSolution = false;
   note = '';
-  state.current = problem ? { id: problem.id, kyu: state.kyu, moves: [], status: 'playing' } : null;
+  state.current = problem ? { id: problem.id, kyu: state.kyu, moves: [], status: 'playing', started: Date.now() } : null;
   save();
   render();
 }
@@ -94,7 +94,16 @@ function finish(solved) {
   current.kyuAfter = nextKyu(current.kyu, problem.rank, solved, state.history.length);
   state.kyu = current.kyuAfter;
   state.seen[current.id] = Date.now();
-  state.history.push({ date: new Date().toISOString(), id: current.id, rank: problem.rank, kyu: current.kyu, solved });
+  state.history.push({
+    date: new Date().toISOString(),
+    id: current.id,
+    rank: problem.rank,
+    kyu: current.kyu,
+    kyuAfter: current.kyuAfter,
+    solved,
+    moves: current.moves.map(pairOf).join(' '),
+    seconds: current.started ? Math.round((Date.now() - current.started) / 1000) : null,
+  });
   if (state.history.length > historyLimit) state.history.splice(0, state.history.length - historyLimit);
   save();
   render();
@@ -339,7 +348,30 @@ function collectionsBlock() {
   picker.hidden = true;
   picker.addEventListener('change', () => importFile(picker.files?.[0]));
   block.append(el('span', '', `Задач: ${problems.length}${version ? ` · версия ${version}` : ''}`), button('Загрузить сборник', 'link', () => picker.click()), picker);
+  if (state.history.length) block.append(button('Выгрузить историю', 'link', exportHistory));
   return block;
+}
+
+/**
+ * The solved and missed problems as a file, for checking the difficulty scale on the Mac. On the iPhone
+ * the share sheet saves it («Сохранить в Файлы»); elsewhere it downloads.
+ */
+async function exportHistory() {
+  const day = new Date().toISOString().slice(0, 10);
+  const file = new File([JSON.stringify({ exported: new Date().toISOString(), kyu: state.kyu, history: state.history })], `g-read-history-${day}.json`, { type: 'application/json' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      return;
+    }
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(file);
+  link.download = file.name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
 }
 
 /** A collection file made on the Mac: { name, problems }. It replaces a loaded one of the same name. */
