@@ -14,6 +14,15 @@ export function takeSamples(text) {
   return Float32Array.from(new Int16Array(bytes.buffer), (value) => value / 32768);
 }
 
+/** The player's switch, kept in the browser per app; the Mac window forgets it on quit. */
+const quietKey = `quiet:${location.pathname.split('/')[1]}`;
+let quiet = (() => { try { return localStorage.getItem(quietKey) === '1'; } catch { return false; } })();
+export const soundOn = () => !quiet;
+export function setSoundOn(on) {
+  quiet = !on;
+  try { localStorage.setItem(quietKey, quiet ? '1' : '0'); } catch { /* private mode: only for this visit */ }
+}
+
 let audio = null;
 let stoneBuffers = null;
 /** Wall time and sound time at the last look: a sound whose clock stands still is dead. */
@@ -74,6 +83,7 @@ function strike() {
  * so it starts only once the sound is running, and is dropped if that takes too long.
  */
 export function playStone() {
+  if (quiet) return;
   wakeSound();
   if (!audio) return;
   if (audio.state === 'running') return strike();

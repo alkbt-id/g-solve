@@ -2,7 +2,7 @@
 import { play, isLegal } from './rules.mjs';
 import { answer, nextKyu, pairOf, pickEasier, pickProblem, playLine, problemPosition, rankText, size, solutionLine, startKyu, strongestKyu, viewOf, weakestKyu } from './problems.mjs';
 import { loadCollections, loadState, saveCollection, saveState } from './store.mjs';
-import { listenForSound, playStone } from './sound.mjs';
+import { listenForSound, playStone, setSoundOn, soundOn } from './sound.mjs';
 
 const historyLimit = 5000;
 const replyPause = 350;
@@ -349,6 +349,7 @@ function collectionsBlock() {
   picker.addEventListener('change', () => importFile(picker.files?.[0]));
   block.append(el('span', '', `Задач: ${problems.length}${version ? ` · версия ${version}` : ''}`), button('Загрузить сборник', 'link', () => picker.click()), picker);
   if (state.history.length) block.append(button('Выгрузить историю', 'link', exportHistory));
+  block.append(button(soundOn() ? 'Выключить звук' : 'Включить звук', 'link', toggleSound));
   return block;
 }
 
@@ -393,6 +394,10 @@ async function importFile(file) {
       ? 'Сборник не загружен: файл ещё не скачан из iCloud. Открой его в «Файлах» (iCloud Drive → G Read), дождись, пока он скачается, и выбери снова.'
       : `Сборник не загружен: ${error.message}`;
   }
+  render();
+}
+function toggleSound() {
+  setSoundOn(!soundOn());
   render();
 }
 
